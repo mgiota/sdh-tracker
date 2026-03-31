@@ -155,6 +155,24 @@ Auto-created engineers from Slack sync have placeholder handles (`kevin.delemme`
 ### 6. Scan improvement — false positive filtering
 The scan occasionally picks up non-SDH issues (e.g. "test issue" #267 was imported). Consider adding a filter — only import issues where DutyHelper explicitly assigns them to the current duty engineer, or issues with `urgency:` label.
 
+## Scan — DutyHelper message format
+
+The real DutyHelper message format in `actionable-obs-sdh`:
+
+```
+@panagiota.mitsopoulou!
+I have assigned you the following SDH, as to my knowledge you are currently on duty for area::observability-alerting-custom_threshold:
+
+:warning: urgency:24h #6164 - Customer threshold rules
+```
+
+Key parsing notes:
+- Assignee is a `@mention` (not a plain name)
+- The `area::label` appears on the second line (before the colon)
+- Issue number and title are on the urgency line: `urgency:Xh #NUMBER - Title`
+- Many different area labels exist — extract whatever appears, don't hardcode them
+- The scan prompt searches for "I have assigned you the following SDH" to find these messages
+
 ---
 
 ### 7. Notification/reminder system

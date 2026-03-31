@@ -37,6 +37,9 @@ Elastic has many area labels and they change over time. A DB table means new map
 ## Why weekly reports are cached?
 Generating a report takes 20-30 seconds (Claude CLI call). Caching means subsequent views are instant. Engineers can regenerate when needed (end of week, after new cases are resolved). The cache is per week_start date so each week's report is independent.
 
+## Why the scan prompt uses a real DutyHelper message as an example
+The initial scan prompt assumed a simplified message format (`"@name! I have assigned you..."`) that didn't match reality. DutyHelper posts multi-line messages where the area label and the issue number are on separate lines. Providing Claude with a verbatim example of the real message format — including the `:warning:` emoji, the line break between area label and issue line, and the `@mention` style — made extraction reliable. Generic format descriptions were not enough; a concrete example was needed.
+
 ## What was deliberately not built
 - **Google Docs integration** — replaced by this app itself
 - **Full Slack message fetching** (showing thread inline) — Claude MCP reads threads on demand via chat, which is more useful than storing raw messages
