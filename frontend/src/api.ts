@@ -46,6 +46,22 @@ export const getSlackMessages = (caseId: number, linkId: number) =>
 export const summarizeSlackThread = (caseId: number, linkId: number) =>
   req<any>(`/cases/${caseId}/slack-links/${linkId}/summarize`, { method: "POST" });
 
+export const deleteCase       = (id: number) =>
+  req(`/cases/${id}`, { method: "DELETE" });
+export const updateGithubUrl  = (id: number, github_url: string) =>
+  req(`/cases/${id}/github-url`, { method: "PATCH", body: JSON.stringify({ github_url }) });
+
+// Scan
+export const scanForSDHs = (engineer_id?: number) =>
+  req<{ imported: any[]; skipped: any[]; errors: string[] }>("/scan", {
+    method: "POST",
+    body: JSON.stringify({ engineer_id }),
+  });
+
+// Schedule sync
+export const syncSchedule = () =>
+  req<{ synced: number; errors: string[] }>("/schedule/sync", { method: "POST" });
+
 // Reports
 export const getWeeklyReport    = (weekStart: string, refresh = false) =>
   req<any>(`/reports/weekly?week_start=${weekStart}${refresh ? "&refresh=true" : ""}`);

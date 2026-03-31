@@ -34,14 +34,22 @@ router.post("/import", async (req: Request, res: Response) => {
     }
     const issue = await fetchIssue(owner, repo, number);
     const comments = await fetchComments(owner, repo, number);
+    // Find current duty engineer
+    const dutyEng = await pool.query(
+      `SELECT engineer_id FROM duty_weeks
+       WHERE week_start <= CURRENT_DATE AND week_end >= CURRENT_DATE
+       LIMIT 1`
+    );
+    const ownerId = dutyEng.rows.length ? dutyEng.rows[0].engineer_id : (engineer_id ?? null);
+
     const { rows } = await pool.query(
       `INSERT INTO cases
         (github_url, github_issue_num, github_repo, title, body, status,
          github_author, github_labels, opened_by_id, current_owner_id)
-       VALUES ($1,$2,$3,$4,$5,'open',$6,$7,$8,$8)
+       VALUES ($1,$2,$3,$4,$5,'open',$6,$7,$8,$9)
        RETURNING *`,
       [github_url, number, repoPath, issue.title, issue.body ?? "",
-       issue.user.login, issue.labels.map((l) => l.name), engineer_id ?? null]
+       issue.user.login, issue.labels.map((l) => l.name), engineer_id ?? null, ownerId]
     );
     const caseId = rows[0].id;
 
@@ -206,6 +214,34 @@ router.post("/:id/updates", async (req: Request, res: Response) => {
     }
 
     res.status(201).json(rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/cases/:id ────────────────────────────────────────────────────
+router.delete("/:id", async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query("SELECT id FROM cases WHERE id=$1", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    await pool.query("DELETE FROM cases WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /api/cases/:id/github-url ─────────────────────────────────────────
+router.patch("/:id/github-url", async (req: Request, res: Response) => {
+  const { github_url } = req.body;
+  if (!github_url) return res.status(400).json({ error: "github_url required" });
+  try {
+    const { owner, repo, number } = parseIssueUrl(github_url);
+    await pool.query(
+      `UPDATE cases SET github_url=$1, github_repo=$2, github_issue_num=$3, updated_at=NOW() WHERE id=$4`,
+      [github_url, `${owner}/${repo}`, number, req.params.id]
+    );
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import {
   getCase, updateCase, addUpdate, refreshCase, addHandover,
   getEngineers, summarizeCase, getChatHistory, summarizeSlackThread,
-  deleteUpdate, deleteSlackLink,
+  deleteUpdate, deleteSlackLink, updateGithubUrl, deleteCase,
 } from "../api";
 import type { CaseDetail, CaseStatus, Engineer } from "../types";
 
@@ -17,7 +17,6 @@ const STATUS_COLOR: Record<CaseStatus, string> = {
   open: "bg-blue-100 text-blue-800", pending_customer: "bg-amber-100 text-amber-800",
   pending_internal: "bg-purple-100 text-purple-800", resolved: "bg-green-100 text-green-800",
 };
-
 const UPDATE_META: Record<string, { icon: string; label: string; color: string }> = {
   note:          { icon: "📝", label: "Internal note",    color: "text-gray-600" },
   call_notes:    { icon: "📞", label: "Call outcome",     color: "text-green-700" },
@@ -59,9 +58,12 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
   const [saving, setSaving]           = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [editingUrl, setEditingUrl]   = useState(false);
+  const [newGithubUrl, setNewGithubUrl] = useState("");
 
   const [expandedSummaries, setExpandedSummaries] = useState<Record<number, boolean>>({});
   const [summarizingSlack, setSummarizingSlack]   = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog]         = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   const [chatOpen, setChatOpen]               = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -82,6 +84,10 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, streamingMsg]);
+
+  function openConfirm(message: string, onConfirm: () => void) {
+    setConfirmDialog({ message, onConfirm });
+  }
 
   async function changeStatus(status: CaseStatus) {
     if (!engineer || !c) return;
@@ -132,26 +138,6 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
     await load(); setSaving(false);
   }
 
-  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
-
-  function confirm(message: string, onConfirm: () => void) {
-    setConfirmDialog({ message, onConfirm });
-  }
-
-  async function doDeleteUpdate(updateId: number, label: string) {
-    confirm(`Delete this ${label}? This cannot be undone.`, async () => {
-      await deleteUpdate(Number(id), updateId);
-      await load();
-    });
-  }
-
-  async function doDeleteSlackLink(linkId: number) {
-    confirm("Remove this Slack thread link? This cannot be undone.", async () => {
-      await deleteSlackLink(Number(id), linkId);
-      await load();
-    });
-  }
-
   async function doRefresh() {
     if (!c) return;
     setRefreshing(true);
@@ -180,6 +166,35 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
     } finally {
       setSummarizingSlack(null);
     }
+  }
+
+  async function doDeleteUpdate(updateId: number, label: string) {
+    openConfirm(`Delete this ${label}? This cannot be undone.`, async () => {
+      await deleteUpdate(Number(id), updateId);
+      await load();
+    });
+  }
+
+  async function doDeleteSlackLink(linkId: number) {
+    openConfirm("Remove this Slack thread link? This cannot be undone.", async () => {
+      await deleteSlackLink(Number(id), linkId);
+      await load();
+    });
+  }
+
+  async function doDeleteCase() {
+    openConfirm("Delete this case permanently? All notes, updates and handovers will be lost.", async () => {
+      await deleteCase(Number(id));
+      navigate("/");
+    });
+  }
+
+  async function doUpdateGithubUrl() {
+    if (!newGithubUrl.trim() || !c) return;
+    await updateGithubUrl(c.id, newGithubUrl.trim());
+    setEditingUrl(false);
+    setNewGithubUrl("");
+    await load();
   }
 
   async function sendChat() {
@@ -233,6 +248,10 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
   const hasGithubUrl = /https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+/.test(chatInput);
   const hasSlackUrl  = /https?:\/\/[a-z]+\.slack\.com\/archives\//.test(chatInput);
 
+  const aiSummaryParsed = (() => {
+    try { return c.ai_summary ? JSON.parse(c.ai_summary) : null; } catch { return null; }
+  })();
+
   return (
     <div className="space-y-4">
       <button onClick={() => navigate("/")} className="text-sm text-elastic-blue hover:underline">
@@ -250,7 +269,22 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
           </div>
           <a href={c.github_url} target="_blank" rel="noreferrer"
             className="text-xs text-elastic-blue underline shrink-0">View on GitHub ↗</a>
+          <button onClick={() => { setEditingUrl(true); setNewGithubUrl(c.github_url); }}
+            className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✏️ Edit URL</button>
+          <button onClick={doDeleteCase}
+            className="text-xs text-gray-400 hover:text-red-400 transition-colors shrink-0">🗑 Delete case</button>
         </div>
+        {editingUrl && (
+          <div className="flex gap-2">
+            <input value={newGithubUrl} onChange={e => setNewGithubUrl(e.target.value)}
+              placeholder="https://github.com/elastic/sdh-kibana/issues/123"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue" />
+            <button onClick={doUpdateGithubUrl}
+              className="bg-elastic-blue text-white px-3 py-1.5 rounded-lg text-xs font-medium">Save</button>
+            <button onClick={() => setEditingUrl(false)}
+              className="border border-gray-200 px-3 py-1.5 rounded-lg text-xs text-gray-500">Cancel</button>
+          </div>
+        )}
         <div className="flex flex-wrap gap-3 items-center">
           <div>
             <label className="text-xs text-gray-400 block mb-1">Status</label>
@@ -283,44 +317,37 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
       </div>
 
       {/* ── AI Summary ── */}
-      {(() => {
-        const parsed = (() => {
-          try { return c.ai_summary ? JSON.parse(c.ai_summary) : null; } catch { return null; }
-        })();
-        return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">✨ AI Summary</span>
-                {c.ai_summary_at && <span className="text-xs text-gray-400">· {fmt(c.ai_summary_at)}</span>}
-              </div>
-              <button onClick={doSummarize} disabled={summarizing}
-                className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-                {summarizing ? "Generating…" : "↻ Regenerate"}
-              </button>
-            </div>
-            {!parsed ? (
-              <p className="text-sm text-gray-400 italic">
-                {summarizing ? "Generating summary…" : "No summary yet — click Regenerate to generate one."}
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {([
-                  ["🔍 What it's about", parsed.summary],
-                  ["🔧 What was tried",  parsed.what_was_tried],
-                  ["⚠️ Current status",  parsed.current_status],
-                  ["👉 Next steps",      parsed.next_steps],
-                ] as [string, string][]).map(([label, value]) => value ? (
-                  <div key={label} className="space-y-1">
-                    <div className="text-xs font-medium text-gray-500">{label}</div>
-                    <p className="text-sm text-gray-800">{value}</p>
-                  </div>
-                ) : null)}
-              </div>
-            )}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">✨ AI Summary</span>
+            {c.ai_summary_at && <span className="text-xs text-gray-400">· {fmt(c.ai_summary_at)}</span>}
           </div>
-        );
-      })()}
+          <button onClick={doSummarize} disabled={summarizing}
+            className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            {summarizing ? "Generating…" : "↻ Regenerate"}
+          </button>
+        </div>
+        {!aiSummaryParsed ? (
+          <p className="text-sm text-gray-400 italic">
+            {summarizing ? "Generating summary…" : "No summary yet — click Regenerate to generate one."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {([
+              ["🔍 What it's about", aiSummaryParsed.summary],
+              ["🔧 What was tried",  aiSummaryParsed.what_was_tried],
+              ["⚠️ Current status",  aiSummaryParsed.current_status],
+              ["👉 Next steps",      aiSummaryParsed.next_steps],
+            ] as [string, string][]).map(([label, value]) => value ? (
+              <div key={label} className="space-y-1">
+                <div className="text-xs font-medium text-gray-500">{label}</div>
+                <p className="text-sm text-gray-800">{value}</p>
+              </div>
+            ) : null)}
+          </div>
+        )}
+      </div>
 
       {/* ── Tabs ── */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -391,8 +418,7 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
                           <span className="text-xs text-gray-500 font-medium">{u.engineer_name ?? "System"}</span>
                           <span className="text-xs text-gray-400">· {fmt(u.created_at)}</span>
                           {deletable && (
-                            <button
-                              onClick={() => doDeleteUpdate(u.id, meta.label)}
+                            <button onClick={() => doDeleteUpdate(u.id, meta.label)}
                               className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 text-xs px-1">
                               🗑
                             </button>
@@ -467,21 +493,18 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
                           className="text-xs border border-purple-200 text-purple-700 px-3 py-1.5 rounded-lg hover:bg-purple-50">
                           Open ↗
                         </a>
-                        <button
-                          onClick={() => { setChatOpen(true); setChatInput(`Please read and summarize this Slack thread in the context of this case: ${link.url}`); }}
+                        <button onClick={() => { setChatOpen(true); setChatInput(`Please read and summarize this Slack thread in the context of this case: ${link.url}`); }}
                           className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700">
                           💬 Ask AI
                         </button>
-                        <button
-                          onClick={() => doDeleteSlackLink(link.id)}
+                        <button onClick={() => doDeleteSlackLink(link.id)}
                           className="text-xs border border-red-200 text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-50">
                           🗑
                         </button>
                       </div>
                     </div>
                     <div className="border-t border-purple-50">
-                      <button
-                        onClick={() => setExpandedSummaries(e => ({ ...e, [link.id]: !expanded }))}
+                      <button onClick={() => setExpandedSummaries(e => ({ ...e, [link.id]: !expanded }))}
                         className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-purple-700 hover:bg-purple-50 transition-colors">
                         <span className="flex items-center gap-1.5">
                           ✨ AI Summary
@@ -577,13 +600,11 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
               <p className="text-sm text-gray-700 pt-1">{confirmDialog.message}</p>
             </div>
             <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setConfirmDialog(null)}
+              <button onClick={() => setConfirmDialog(null)}
                 className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
                 Cancel
               </button>
-              <button
-                onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
+              <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
                 className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 font-medium">
                 Delete
               </button>
@@ -662,14 +683,11 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
               </div>
             )}
             <div className="flex gap-2">
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
+              <input value={chatInput} onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()}
                 placeholder="Ask anything, or paste a GitHub/Slack URL…"
                 disabled={chatLoading}
-                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue disabled:opacity-50"
-              />
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue disabled:opacity-50" />
               <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()}
                 className="bg-elastic-blue text-white px-3 py-2 rounded-xl text-sm font-medium disabled:opacity-50">
                 ↑

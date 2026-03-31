@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDutySchedule, createDutyWeek, getEngineers } from "../api";
+import { getDutySchedule, createDutyWeek, getEngineers, syncSchedule } from "../api";
 import type { DutyWeek, Engineer } from "../types";
 
 export default function SchedulePage() {
@@ -10,6 +10,21 @@ export default function SchedulePage() {
   const [end, setEnd]     = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState("");
+  const [syncing, setSyncing]       = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; errors: string[] } | null>(null);
+
+  async function doSync() {
+    setSyncing(true); setSyncResult(null);
+    try {
+      const result = await syncSchedule();
+      setSyncResult(result);
+      await load();
+    } catch (e: any) {
+      setSyncResult({ synced: 0, errors: [e.message] });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load() {
     const [w, e] = await Promise.all([getDutySchedule(), getEngineers()]);
@@ -29,7 +44,24 @@ export default function SchedulePage() {
 
   return (
     <div className="space-y-6 max-w-xl">
-      <h1 className="font-bold text-xl">SDH Duty Schedule</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-bold text-xl">SDH Duty Schedule</h1>
+        <button onClick={doSync} disabled={syncing}
+          className="text-xs flex items-center gap-1.5 bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+          {syncing ? "Syncing…" : "💬 Sync from Slack"}
+        </button>
+      </div>
+      {syncResult && (
+        <div className={`rounded-xl border p-4 text-sm space-y-1 ${syncResult.errors.length ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
+          {syncResult.synced > 0 && (
+            <p className="text-green-700 font-medium">✓ Synced {syncResult.synced} duty period{syncResult.synced !== 1 ? "s" : ""} from Slack</p>
+          )}
+          {syncResult.synced === 0 && syncResult.errors.length === 0 && (
+            <p className="text-gray-500">No new schedule entries found in Slack</p>
+          )}
+          {syncResult.errors.map((e, i) => <p key={i} className="text-amber-700">⚠️ {e}</p>)}
+        </div>
+      )}
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
         <h2 className="font-semibold text-sm">Assign a duty week</h2>
         <select value={engId} onChange={e => setEngId(e.target.value)}
@@ -69,7 +101,9 @@ export default function SchedulePage() {
                     {w.name}
                     {isNow && <span className="text-xs bg-elastic-blue text-white px-1.5 py-0.5 rounded-full">This week</span>}
                   </div>
-                  <div className="text-xs text-gray-400">{w.week_start} → {w.week_end}</div>
+                  <div className="text-xs text-gray-400">
+                  {new Date(w.week_start).toISOString().split('T')[0]} → {new Date(w.week_end).toISOString().split('T')[0]}
+                  </div>
                 </div>
               </div>
             );
