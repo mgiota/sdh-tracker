@@ -78,6 +78,8 @@ sdh-tracker/
 - **Edit GitHub URL** — fix wrong repo if Claude inferred incorrectly
 - **Engineer dedup script** — `backend/scripts/dedup-engineers.ts` cleans up duplicate engineer records, supports `--dry-run`
 - **Engineer fuzzy-match sync** — schedule sync normalizes names before creating engineers, preventing duplicates from Slack name format differences
+- **Similar cases** — "Find similar cases" button on case detail page; searches imported non-open cases or GitHub issues (radio toggle), Claude ranks top 3 with similarity explanation; local results navigate to case detail, GitHub results open in new tab
+- **AI similar cases analysis** — "Analyze similar past cases and suggest applicable solutions" suggestion in AI chat; fetches top 3 from both imported cases and GitHub in parallel, sends combined results to Claude with labels, Claude responds with pattern analysis and actionable suggestions
 
 ## Environment variables (backend/.env)
 
@@ -105,14 +107,7 @@ Chat uses streaming via `spawn` with `--output-format stream-json`.
 
 ## TODO list
 
-### 1. Similar cases feature
-**Not built yet.** When on a case detail page, a button that searches all resolved cases for similar issues and shows ranked matches with explanation of similarity — powered by Claude comparing current issue against past ones.
-
-**Suggested approach:** Send current case title + body + AI summary to Claude along with all resolved case summaries, ask it to rank by similarity and explain why.
-
----
-
-### 2. PagerDuty schedule integration
+### 1. PagerDuty schedule integration
 **Status:** Stub exists in `scheduleProvider.ts`, ready to implement.
 
 **What's needed:**

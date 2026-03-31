@@ -4,9 +4,9 @@ import ReactMarkdown from "react-markdown";
 import {
   getCase, updateCase, addUpdate, refreshCase, addHandover,
   getEngineers, summarizeCase, getChatHistory, summarizeSlackThread,
-  deleteUpdate, deleteSlackLink, updateGithubUrl, deleteCase,
+  deleteUpdate, deleteSlackLink, updateGithubUrl, deleteCase, getSimilarCases,
 } from "../api";
-import type { CaseDetail, CaseStatus, Engineer } from "../types";
+import type { CaseDetail, CaseStatus, Engineer, SimilarCase } from "../types";
 
 const STATUS_OPTS: CaseStatus[] = ["open", "pending_customer", "pending_internal", "resolved"];
 const STATUS_LABEL: Record<CaseStatus, string> = {
@@ -27,7 +27,9 @@ const UPDATE_META: Record<string, { icon: string; label: string; color: string }
 
 type Tab = "thread" | "timeline" | "slack" | "handover";
 
+const SIMILAR_CASES_SUGGESTION = "Analyze similar past cases and suggest applicable solutions";
 const SUGGESTIONS = [
+  SIMILAR_CASES_SUGGESTION,
   "What's the most likely root cause?",
   "Draft a response to the customer",
   "What Elastic docs are relevant?",
@@ -64,6 +66,10 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
   const [expandedSummaries, setExpandedSummaries] = useState<Record<number, boolean>>({});
   const [summarizingSlack, setSummarizingSlack]   = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog]         = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [findingSimilar, setFindingSimilar]       = useState(false);
+  const [similarCases, setSimilarCases]           = useState<SimilarCase[] | null>(null);
+  const [showSimilarModal, setShowSimilarModal]   = useState(false);
+  const [similarSource, setSimilarSource]         = useState<"local" | "github">("local");
 
   const [chatOpen, setChatOpen]               = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -155,6 +161,51 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
     setSummarizing(false);
   }
 
+  async function analyzeWithSimilarCases() {
+    if (!c) return;
+    setChatOpen(true);
+    setShowSuggestions(false);
+    setChatLoading(true);
+    setChatHistory(h => [...h, { role: "user", content: SIMILAR_CASES_SUGGESTION }]);
+    try {
+      const [localSimilar, githubSimilar] = await Promise.all([
+        getSimilarCases(c.id, "local").catch(() => []),
+        getSimilarCases(c.id, "github").catch(() => []),
+      ]);
+
+      const allSimilar = [...localSimilar, ...githubSimilar];
+
+      if (!allSimilar.length) {
+        await sendChat("Find similar past cases and suggest applicable solutions. Note: no similar cases were found in either the imported cases database or GitHub.");
+        return;
+      }
+
+      const format = (sc: typeof allSimilar[0], i: number) =>
+        `${i + 1}. [${sc.source === "local" ? "Imported" : "GitHub"}] "${sc.title}" (status: ${sc.status})\n   Why similar: ${sc.similarity_explanation}\n   URL: ${sc.github_url}`;
+
+      const summaries = allSimilar.map(format).join("\n\n");
+      const msg = `I found ${allSimilar.length} similar case(s) (${localSimilar.length} imported, ${githubSimilar.length} from GitHub):\n\n${summaries}\n\nBased on these similar cases, what patterns do you see? What solutions or approaches from these cases might be applicable to the current one?`;
+      await sendChat(msg);
+    } catch {
+      await sendChat("Analyze similar past cases and suggest applicable solutions based on your knowledge of this case.");
+    }
+  }
+
+  async function doFindSimilar() {
+    if (!c) return;
+    setFindingSimilar(true);
+    setShowSimilarModal(true);
+    setSimilarCases(null);
+    try {
+      const results = await getSimilarCases(c.id, similarSource);
+      setSimilarCases(results);
+    } catch (e: any) {
+      setSimilarCases([]);
+    } finally {
+      setFindingSimilar(false);
+    }
+  }
+
   async function doSummarizeSlack(linkId: number) {
     setSummarizingSlack(linkId);
     try {
@@ -197,10 +248,10 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
     await load();
   }
 
-  async function sendChat() {
-    if (!chatInput.trim() || chatLoading) return;
-    const userMsg = chatInput.trim();
-    setChatInput("");
+  async function sendChat(overrideMsg?: string) {
+    const userMsg = overrideMsg ?? chatInput.trim();
+    if (!userMsg || chatLoading) return;
+    if (!overrideMsg) setChatInput("");
     setChatHistory(h => [...h, { role: "user", content: userMsg }]);
     setChatLoading(true);
     setStreamingMsg("");
@@ -307,7 +358,22 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
               {engineers.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              {(["local", "github"] as const).map(s => (
+                <label key={s} className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="similarSource" value={s}
+                    checked={similarSource === s}
+                    onChange={() => setSimilarSource(s)}
+                    className="accent-elastic-blue" />
+                  {s === "local" ? "Imported" : "GitHub"}
+                </label>
+              ))}
+            </div>
+            <button onClick={doFindSimilar} disabled={findingSimilar}
+              className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              {findingSimilar ? "Searching…" : "🔍 Find similar cases"}
+            </button>
             <button onClick={doRefresh} disabled={refreshing}
               className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {refreshing ? "Refreshing…" : "↻ Refresh from GitHub"}
@@ -613,6 +679,51 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
         </div>
       )}
 
+      {/* ── Similar cases modal ── */}
+      {showSimilarModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowSimilarModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-[560px] max-h-[80vh] overflow-y-auto space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-base">Similar cases</h2>
+              <button onClick={() => setShowSimilarModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            {findingSimilar || similarCases === null ? (
+              <div className="text-sm text-gray-400 py-8 text-center">Searching for similar cases…</div>
+            ) : similarCases.length === 0 ? (
+              <div className="text-sm text-gray-400 py-8 text-center">No similar cases found yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {similarCases.map(sc => (
+                  <div key={sc.id} className="border border-gray-200 rounded-xl p-4 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      {sc.source === "github" ? (
+                        <a href={sc.github_url} target="_blank" rel="noreferrer"
+                          className="text-sm font-medium text-elastic-blue hover:underline text-left">
+                          {sc.title} ↗
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => { setShowSimilarModal(false); navigate(`/cases/${sc.id}`); }}
+                          className="text-sm font-medium text-elastic-blue hover:underline text-left">
+                          {sc.title}
+                        </button>
+                      )}
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-gray-100 text-gray-600">
+                        {sc.status.replace("_", " ")}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">{sc.similarity_explanation}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Floating Ask AI button ── */}
       <button onClick={() => setChatOpen(o => !o)}
         className="fixed bottom-6 right-6 bg-elastic-blue text-white px-4 py-3 rounded-full shadow-lg font-medium text-sm flex items-center gap-2 hover:bg-blue-700 transition-colors z-40">
@@ -633,7 +744,10 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
           {showSuggestions && (
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 space-y-1">
               {SUGGESTIONS.map(q => (
-                <button key={q} onClick={() => { setChatInput(q); setShowSuggestions(false); }}
+                <button key={q} onClick={() => {
+                  if (q === SIMILAR_CASES_SUGGESTION) { analyzeWithSimilarCases(); }
+                  else { setChatInput(q); setShowSuggestions(false); }
+                }}
                   className="block w-full text-left bg-white hover:bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600">
                   "{q}"
                 </button>
@@ -688,7 +802,7 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
                 placeholder="Ask anything, or paste a GitHub/Slack URL…"
                 disabled={chatLoading}
                 className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue disabled:opacity-50" />
-              <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()}
+              <button onClick={() => sendChat()} disabled={chatLoading || !chatInput.trim()}
                 className="bg-elastic-blue text-white px-3 py-2 rounded-xl text-sm font-medium disabled:opacity-50">
                 ↑
               </button>

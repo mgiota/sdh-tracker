@@ -356,6 +356,174 @@ Respond ONLY with a JSON object in this format, no markdown, no preamble:
   }
 });
 
+// ── POST /api/cases/:id/similar ─────────────────────────────────────────────
+interface SimilarCase {
+  id: number;
+  title: string;
+  github_url: string;
+  status: string;
+  similarity_explanation: string;
+  source: "local" | "github";
+}
+
+router.post("/:id/similar", async (req: Request, res: Response) => {
+  const source: "local" | "github" = req.body.source ?? "local";
+  try {
+    const { rows: current } = await pool.query(
+      "SELECT id, title, body, ai_summary, github_url FROM cases WHERE id=$1",
+      [req.params.id]
+    );
+    if (!current.length) return res.status(404).json({ error: "Not found" });
+    const c = current[0];
+    const claudePath = process.env.CLAUDE_PATH || "claude";
+    const currentText = c.ai_summary
+      ? c.ai_summary
+      : `${c.title}\n${(c.body ?? "").slice(0, 500)}`;
+
+    if (source === "github") {
+      // ── GitHub search path ──────────────────────────────────────────────────
+      const { rows: mappings } = await pool.query(
+        "SELECT DISTINCT github_repo FROM area_repo_mappings"
+      );
+      const repoFilter = mappings.map((r: any) => `repo:${r.github_repo}`).join(" ");
+      const query = encodeURIComponent(`${c.title} ${repoFilter} is:issue`);
+      const ghRes = await fetch(
+        `https://api.github.com/search/issues?q=${query}&per_page=10`,
+        { headers: { Authorization: `token ${process.env.GITHUB_TOKEN}`, Accept: "application/vnd.github.v3+json" } }
+      );
+      const ghData = await ghRes.json() as { items?: any[] };
+      const ghItems = (ghData.items ?? [])
+        .filter((i: any) => i.html_url !== c.github_url)
+        .slice(0, 10);
+
+      if (!ghItems.length) return res.json([]);
+
+      const candidateSummaries = ghItems.map((i: any, idx: number) =>
+        `IDX:${idx} | ${i.title}\n${(i.body ?? "").slice(0, 400)}`
+      ).join("\n\n---\n\n");
+
+      const prompt = `You are helping an engineer find similar GitHub issues to a current support case.
+
+Current case:
+Title: ${c.title}
+${currentText}
+
+GitHub issues to compare against:
+${candidateSummaries}
+
+Return the top 3 most similar GitHub issues, ranked by similarity.
+For each, provide a 1-2 sentence explanation of why it is similar.
+
+Return ONLY a JSON array using the IDX numbers, no markdown, no preamble:
+[
+  {
+    "idx": 0,
+    "similarity_explanation": "Both involve SLO filter configuration issues with wildcard patterns."
+  }
+]
+
+If no issues are similar, return: []`;
+
+      const stdout = execSync(`${claudePath} --print --output-format text`, {
+        input: prompt, encoding: "utf8", timeout: 90_000,
+        maxBuffer: 1024 * 1024, env: { ...process.env },
+      }) as string;
+
+      const clean = stdout.replace(/```json|```/g, "").trim();
+      const jsonMatch = clean.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return res.json([]);
+
+      const ranked: { idx: number; similarity_explanation: string }[] = JSON.parse(jsonMatch[0]);
+      const results: SimilarCase[] = ranked
+        .filter(r => r.idx >= 0 && r.idx < ghItems.length)
+        .slice(0, 3)
+        .map(r => {
+          const item = ghItems[r.idx];
+          return {
+            id: item.number,
+            title: item.title,
+            github_url: item.html_url,
+            status: item.state,
+            similarity_explanation: r.similarity_explanation,
+            source: "github" as const,
+          };
+        });
+
+      return res.json(results);
+    }
+
+    // ── Local search path ─────────────────────────────────────────────────────
+    const { rows: candidates } = await pool.query(
+      `SELECT id, title, body, github_url, status, ai_summary
+       FROM cases
+       WHERE status IN ('resolved','pending_customer','pending_internal')
+         AND id != $1`,
+      [req.params.id]
+    );
+
+    if (!candidates.length) return res.json([]);
+
+    const candidateSummaries = candidates.map((cand: any) => {
+      const text = cand.ai_summary
+        ? cand.ai_summary
+        : `${cand.title}\n${(cand.body ?? "").slice(0, 500)}`;
+      return `ID:${cand.id} | ${cand.title}\n${text}`;
+    }).join("\n\n---\n\n");
+
+    const prompt = `You are helping an engineer find similar past support cases.
+
+Current case:
+Title: ${c.title}
+${currentText}
+
+Past cases to compare against:
+${candidateSummaries}
+
+Return the top 3 most similar past cases to the current case, ranked by similarity.
+For each, provide a 1-2 sentence explanation of why it is similar.
+
+Return ONLY a JSON array, no markdown, no preamble:
+[
+  {
+    "id": 42,
+    "similarity_explanation": "Both involve SLO filter configuration issues with wildcard patterns."
+  }
+]
+
+If no cases are similar, return: []`;
+
+    const stdout = execSync(`${claudePath} --print --output-format text`, {
+      input: prompt, encoding: "utf8", timeout: 90_000,
+      maxBuffer: 1024 * 1024, env: { ...process.env },
+    }) as string;
+
+    const clean = stdout.replace(/```json|```/g, "").trim();
+    const jsonMatch = clean.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return res.json([]);
+
+    const ranked: { id: number; similarity_explanation: string }[] = JSON.parse(jsonMatch[0]);
+    const candidateMap = new Map(candidates.map((cand: any) => [cand.id, cand]));
+    const results: SimilarCase[] = ranked
+      .filter(r => candidateMap.has(r.id))
+      .slice(0, 3)
+      .map(r => {
+        const cand = candidateMap.get(r.id)!;
+        return {
+          id: cand.id,
+          title: cand.title,
+          github_url: cand.github_url,
+          status: cand.status,
+          similarity_explanation: r.similarity_explanation,
+          source: "local" as const,
+        };
+      });
+
+    res.json(results);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /api/cases/:id/handover ────────────────────────────────────────────
 router.post("/:id/handover", async (req: Request, res: Response) => {
   const { from_engineer_id, to_engineer_id, summary, next_steps, week_start } = req.body;

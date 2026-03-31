@@ -46,6 +46,9 @@ export const getSlackMessages = (caseId: number, linkId: number) =>
 export const summarizeSlackThread = (caseId: number, linkId: number) =>
   req<any>(`/cases/${caseId}/slack-links/${linkId}/summarize`, { method: "POST" });
 
+export const getSimilarCases  = (id: number, source: "local" | "github" = "local") =>
+  req<import("./types").SimilarCase[]>(`/cases/${id}/similar`, { method: "POST", body: JSON.stringify({ source }) });
+
 export const deleteCase       = (id: number) =>
   req(`/cases/${id}`, { method: "DELETE" });
 export const updateGithubUrl  = (id: number, github_url: string) =>

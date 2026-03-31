@@ -75,6 +75,15 @@ export interface CaseDetail extends Case {
   handovers: Handover[];
 }
 
+export interface SimilarCase {
+  id: number;
+  title: string;
+  github_url: string;
+  status: string;
+  similarity_explanation: string;
+  source: "local" | "github";
+}
+
 export interface DutyWeek {
   id: number;
   name: string;
