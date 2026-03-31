@@ -113,6 +113,42 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
         </div>
       </div>
 
+      {/* ── Scan result banner ── */}
+      {scanResult && (
+        <div className={`rounded-xl border p-4 text-sm ${
+          scanResult.errors.length > 0 ? "bg-red-50 border-red-200" :
+          scanResult.imported.length > 0 ? "bg-green-50 border-green-200" :
+          "bg-gray-50 border-gray-200"
+        }`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              {scanResult.imported.length > 0 && (
+                <div className="text-green-800 font-medium">
+                  Imported {scanResult.imported.length} new case{scanResult.imported.length !== 1 ? "s" : ""}:
+                  {scanResult.imported.map((i: any) => (
+                    <span key={i.case_id} className="ml-2 font-normal">{i.title}</span>
+                  ))}
+                </div>
+              )}
+              {scanResult.skipped.length > 0 && (
+                <div className="text-gray-600">
+                  {scanResult.skipped.length} already imported (skipped)
+                </div>
+              )}
+              {scanResult.errors.length > 0 && (
+                <div className="text-red-700">
+                  {scanResult.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+              {scanResult.imported.length === 0 && scanResult.skipped.length === 0 && scanResult.errors.length === 0 && (
+                <div className="text-gray-600">No new SDH assignments found in Slack.</div>
+              )}
+            </div>
+            <button onClick={() => setScanResult(null)} className="text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Duty banner ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
         <div className="w-10 h-10 rounded-full bg-elastic-blue text-white flex items-center justify-center font-bold text-lg">

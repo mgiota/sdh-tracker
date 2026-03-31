@@ -15,25 +15,38 @@ router.post("/", async (req: Request, res: Response) => {
     const claudePath = process.env.CLAUDE_PATH || "claude";
 
     // Step 1: Read DutyHelper messages from Slack
-    const prompt = `Search the Slack channel actionable-obs-sdh for recent messages from DutyHelper that assign SDH issues. 
+    const prompt = `Search Slack for recent messages from DutyHelper in the actionable-obs-sdh channel. Search for "I have assigned you the following SDH".
 
-Extract all SDH assignments you find. Each message looks like:
-"@name! I have assigned you the following SDH... area::some-label urgency:Xh #1234 - Issue title"
+DutyHelper messages look exactly like this:
 
-Return ONLY a JSON array, no markdown, no preamble:
+  @panagiota.mitsopoulou!
+  I have assigned you the following SDH, as to my knowledge you are currently on duty for area::observability-alerting-custom_threshold:
+
+  :warning: urgency:24h #6164 - Customer threshold rules
+
+Key things to extract from each message:
+- area_label: the "area::something" label (e.g. "area::observability-alerting-custom_threshold")
+- issue_number: the number after "#" (e.g. 6164)
+- title: the text after "- " on the urgency line (e.g. "Customer threshold rules")
+- assignee: the @mention name (e.g. "panagiota.mitsopoulou")
+
+There are many different area labels — extract whatever area::label appears in each message.
+Extract ALL such messages from the last 7 days.
+
+Return ONLY a JSON array, no markdown, no preamble, no explanation:
 [
   {
-    "area_label": "area::observability-alerting-metrics",
-    "issue_number": 6163,
-    "title": "Issue title",
-    "assignee": "Full Name"
+    "area_label": "area::observability-alerting-custom_threshold",
+    "issue_number": 6164,
+    "title": "Customer threshold rules",
+    "assignee": "panagiota.mitsopoulou"
   }
 ]
 
 If no SDH assignments found, return: []`;
 
     const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_search_public_and_private,mcp__claude_ai_Slack__slack_read_channel`,
+      `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_search_public_and_private,mcp__claude_ai_Slack__slack_read_channel,mcp__claude_ai_Slack__slack_search_channels`,
       {
         input: prompt,
         encoding: "utf8",
@@ -44,8 +57,12 @@ If no SDH assignments found, return: []`;
     ) as string;
 
     const clean = stdout.replace(/```json|```/g, "").trim();
+    console.log("[scan] Claude raw output:", clean.slice(0, 2000));
     const jsonMatch = clean.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return res.json({ imported: [], skipped: [], errors: [] });
+    if (!jsonMatch) {
+      console.log("[scan] No JSON array found in output");
+      return res.json({ imported: [], skipped: [], errors: [] });
+    }
 
     const assignments: { area_label: string; issue_number: number; title: string; assignee: string }[] =
       JSON.parse(jsonMatch[0]);
