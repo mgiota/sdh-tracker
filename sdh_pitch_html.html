@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SDH Context Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #f5f4f0;
+      color: #1a1a18;
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      padding: 2rem 0 1rem;
+    }
+    .hero-icon { font-size: 48px; margin-bottom: 0.75rem; }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 500;
+      color: #1a1a18;
+      margin-bottom: 0.5rem;
+    }
+    .hero p {
+      font-size: 16px;
+      color: #6b6a64;
+    }
+
+    /* Section label */
+    .section-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #888780;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 1rem;
+    }
+
+    /* Card */
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 0.5px solid rgba(0,0,0,0.12);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Problem grid */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .problem-item {
+      background: #ffffff;
+      border-radius: 8px;
+      border: 0.5px solid rgba(0,0,0,0.1);
+      padding: 1rem;
+      text-align: center;
+    }
+    .problem-item .icon { font-size: 24px; margin-bottom: 0.5rem; }
+    .problem-item h3 { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    .problem-item p { font-size: 12px; color: #6b6a64; }
+
+    /* Arrow */
+    .arrow {
+      text-align: center;
+      font-size: 22px;
+      color: #888780;
+      margin: 0.5rem 0;
+    }
+
+    /* Features grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .feature-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 0.5px solid rgba(0,0,0,0.1);
+      padding: 0.875rem;
+    }
+    .feature-item .icon { font-size: 18px; flex-shrink: 0; }
+    .feature-item h3 { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+    .feature-item p { font-size: 12px; color: #6b6a64; }
+
+    /* Benefits */
+    .benefits { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+    .benefit {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.75rem 1rem;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 0.5px solid rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    .benefit-bar {
+      width: 3px;
+      height: 36px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .benefit-bar.blue   { background: #378ADD; }
+    .benefit-bar.green  { background: #639922; }
+    .benefit-bar.amber  { background: #BA7517; }
+    .benefit-bar.purple { background: #7F77DD; }
+
+    /* Tech pills */
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 0.75rem; }
+    .pill {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      background: #ffffff;
+      border: 0.5px solid rgba(0,0,0,0.15);
+      color: #1a1a18;
+    }
+    .tech-note { font-size: 12px; color: #6b6a64; }
+
+    /* Coming next */
+    .next-list { display: flex; flex-direction: column; gap: 8px; }
+    .next-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .next-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #378ADD;
+      flex-shrink: 0;
+    }
+
+    /* Section bg */
+    .section-bg {
+      background: #eeecea;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #888780;
+      margin-top: 2rem;
+      padding-bottom: 1rem;
+    }
+
+    @media (max-width: 520px) {
+      .problem-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 26px; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1918; color: #e8e6df; }
+      .card, .problem-item, .feature-item, .benefit, .pill {
+        background: #252422;
+        border-color: rgba(255,255,255,0.08);
+      }
+      .section-bg { background: #201f1e; }
+      .hero h1 { color: #e8e6df; }
+      .hero p, .problem-item p, .feature-item p, .section-label, .tech-note, .footer { color: #888780; }
+      .problem-item h3, .feature-item h3, .benefit { color: #e8e6df; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-icon">🛡️</div>
+      <h1>SDH Context Manager</h1>
+      <p>A single source of truth for your Support Duty Help rotation</p>
+    </div>
+
+    <!-- Problem -->
+    <div class="section-bg">
+      <p class="section-label">The problem today</p>
+      <div class="problem-grid">
+        <div class="problem-item">
+          <div class="icon">📂</div>
+          <h3>Context fragmented</h3>
+          <p>GitHub, Slack, Google Docs — spread everywhere</p>
+        </div>
+        <div class="problem-item">
+          <div class="icon">⏱️</div>
+          <h3>Slow handovers</h3>
+          <p>30–60 min reconstructing context each week</p>
+        </div>
+        <div class="problem-item">
+          <div class="icon">🔁</div>
+          <h3>Issues span weeks</h3>
+          <p>Multiple engineers, no shared history</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Solution -->
+    <div class="section-bg">
+      <p class="section-label">What SDH Context Manager does</p>
+      <div class="features-grid">
+        <div class="feature-item">
+          <span class="icon">🔗</span>
+          <div>
+            <h3>Auto-import SDH issues</h3>
+            <p>Scans Slack, imports from GitHub automatically</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">✨</span>
+          <div>
+            <h3>AI summaries</h3>
+            <p>Auto-generated on import, refreshable anytime</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">💬</span>
+          <div>
+            <h3>Slack thread context</h3>
+            <p>Link threads, AI reads and summarizes them</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">🤝</span>
+          <div>
+            <h3>Structured handovers</h3>
+            <p>Summary + next steps, visible to all engineers</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">🤖</span>
+          <div>
+            <h3>AI chat assistant</h3>
+            <p>Ask questions, paste GitHub/Slack URLs for context</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">📊</span>
+          <div>
+            <h3>Weekly reports</h3>
+            <p>AI narrative + export as markdown</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benefits -->
+    <div class="card">
+      <p class="section-label">Why this matters</p>
+      <div class="benefits">
+        <div class="benefit">
+          <div class="benefit-bar blue"></div>
+          <p><strong>Faster onboarding</strong> — incoming engineer reads the AI summary and handover notes instead of 40 GitHub comments</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-bar green"></div>
+          <p><strong>Nothing gets lost</strong> — call notes, Slack threads, and decisions are all in one place, forever</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-bar amber"></div>
+          <p><strong>Auto-assignment</strong> — new SDHs are imported and assigned to the duty engineer automatically</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-bar purple"></div>
+          <p><strong>Replaces the Google Doc</strong> — weekly reports generated automatically with AI narrative</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tech stack -->
+    <div class="section-bg">
+      <p class="section-label">How it's built</p>
+      <div class="pills">
+        <span class="pill">React + TypeScript</span>
+        <span class="pill">Node.js + Express</span>
+        <span class="pill">PostgreSQL</span>
+        <span class="pill">GitHub API</span>
+        <span class="pill">Claude CLI + Slack MCP</span>
+        <span class="pill">Self-hosted</span>
+      </div>
+      <p class="tech-note">No external API keys needed — uses your existing Claude CLI authentication and Slack MCP connection</p>
+    </div>
+
+    <!-- Coming next -->
+    <div class="card">
+      <p class="section-label">Coming next</p>
+      <div class="next-list">
+        <div class="next-item">
+          <div class="next-dot"></div>
+          <span>Similar cases — find resolved cases with matching symptoms</span>
+        </div>
+        <div class="next-item">
+          <div class="next-dot"></div>
+          <span>PagerDuty integration — auto-sync schedule from PagerDuty API</span>
+        </div>
+        <div class="next-item">
+          <div class="next-dot"></div>
+          <span>Stale case reminders — nudge when cases sit idle too long</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer">Built for the Elastic Observability team · Self-hosted · Open to contributions</p>
+
+  </div>
+</body>
+</html>
