@@ -38,7 +38,7 @@ If you cannot find any schedule information, return an empty array: []`;
       {
         input: prompt,
         encoding: "utf8",
-        timeout: 60_000,
+        timeout: 120_000,
         maxBuffer: 1024 * 1024,
         env: { ...process.env },
       }
@@ -73,6 +73,11 @@ function getProvider(): ScheduleProvider {
   return new SlackScheduleProvider();
 }
 
+// ── Name normalizer for fuzzy matching ───────────────────────────────────────
+function normalizeEngineerName(name: string): string {
+  return name.toLowerCase().replace(/[\s.\-_]+/g, "");
+}
+
 // ── Sync to DB ────────────────────────────────────────────────────────────────
 export async function syncSchedule(): Promise<{ synced: number; errors: string[] }> {
   const errors: string[] = [];
@@ -82,25 +87,34 @@ export async function syncSchedule(): Promise<{ synced: number; errors: string[]
     const provider = getProvider();
     const periods  = await provider.getSchedule();
 
+    // Load all existing engineers once for fuzzy matching
+    const { rows: allEngineers } = await pool.query<{ id: number; name: string }>(
+      "SELECT id, name FROM engineers"
+    );
+
     for (const period of periods) {
-      // Try to find matching engineer by name
-      const eng = await pool.query(
-        "SELECT id FROM engineers WHERE LOWER(name) = LOWER($1)",
-        [period.name]
+      const normalizedIncoming = normalizeEngineerName(period.name);
+
+      // Fuzzy match: normalize both sides and compare
+      const match = allEngineers.find(
+        e => normalizeEngineerName(e.name) === normalizedIncoming
       );
 
-      if (!eng.rows.length) {
-        // Auto-create missing engineer
+      let engineerId: number;
+
+      if (match) {
+        engineerId = match.id;
+      } else {
+        // No match — create new engineer
         const created = await pool.query(
           `INSERT INTO engineers (name, github_handle)
            VALUES ($1, $2) RETURNING id`,
           [period.name, period.name.toLowerCase().replace(/\s+/g, ".")]
         );
-        eng.rows = created.rows;
+        engineerId = created.rows[0].id;
+        allEngineers.push({ id: engineerId, name: period.name });
         console.log(`Auto-created engineer: ${period.name}`);
       }
-
-      const engineerId = eng.rows[0].id;
 
       // Merge: upsert by engineer + week_start
       await pool.query(

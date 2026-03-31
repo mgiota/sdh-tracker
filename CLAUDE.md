@@ -76,6 +76,8 @@ sdh-tracker/
 - **Weekly report** — AI narrative + structured sections, cached in DB, copy/download as markdown
 - **Delete cases** — from dashboard (hover trash) and case detail page
 - **Edit GitHub URL** — fix wrong repo if Claude inferred incorrectly
+- **Engineer dedup script** — `backend/scripts/dedup-engineers.ts` cleans up duplicate engineer records, supports `--dry-run`
+- **Engineer fuzzy-match sync** — schedule sync normalizes names before creating engineers, preventing duplicates from Slack name format differences
 
 ## Environment variables (backend/.env)
 
@@ -103,25 +105,14 @@ Chat uses streaming via `spawn` with `--output-format stream-json`.
 
 ## TODO list
 
-### 1. Engineer sync — duplicate prevention
-**Problem:** If an engineer is manually added on the Team page before Slack sync runs, the sync creates a duplicate (different ID, same name).
-
-**Option A (recommended):** Slack sync should never auto-create engineers. Instead, flag unknown names as "pending" and show them on the Schedule page for a human to confirm or map to an existing engineer.
-
-**Option B:** Keep auto-create but add a "Merge engineers" tool on the Team page to clean up duplicates.
-
-**Option C:** Show a warning on the Team page: *"Engineers are auto-synced from Slack — manual adding may cause duplicates."* Recommend only using manual add for engineers who never appear in DutyHelper.
-
----
-
-### 2. Similar cases feature
+### 1. Similar cases feature
 **Not built yet.** When on a case detail page, a button that searches all resolved cases for similar issues and shows ranked matches with explanation of similarity — powered by Claude comparing current issue against past ones.
 
 **Suggested approach:** Send current case title + body + AI summary to Claude along with all resolved case summaries, ask it to rank by similarity and explain why.
 
 ---
 
-### 3. PagerDuty schedule integration
+### 2. PagerDuty schedule integration
 **Status:** Stub exists in `scheduleProvider.ts`, ready to implement.
 
 **What's needed:**
@@ -132,7 +123,7 @@ Chat uses streaming via `spawn` with `--output-format stream-json`.
 
 ---
 
-### 4. Area→repo mapping — expand the table
+### 3. Area→repo mapping — expand the table
 **Current entries:**
 - `area::observability-alerting-metrics` → `elastic/sdh-kibana`
 - `area::synthetics` → `elastic/sdh-synthetics`
@@ -147,12 +138,12 @@ ON CONFLICT (area_label) DO NOTHING;
 
 ---
 
-### 5. Team page — GitHub handle cleanup
+### 4. Team page — GitHub handle cleanup
 Auto-created engineers from Slack sync have placeholder handles (`kevin.delemme` format). These should be updated with real GitHub handles so the "Elastic" badge shows correctly on GitHub thread comments.
 
 ---
 
-### 6. Scan improvement — false positive filtering
+### 5. Scan improvement — false positive filtering
 The scan occasionally picks up non-SDH issues (e.g. "test issue" #267 was imported). Consider adding a filter — only import issues where DutyHelper explicitly assigns them to the current duty engineer, or issues with `urgency:` label.
 
 ## Scan — DutyHelper message format
@@ -172,6 +163,22 @@ Key parsing notes:
 - Issue number and title are on the urgency line: `urgency:Xh #NUMBER - Title`
 - Many different area labels exist — extract whatever appears, don't hardcode them
 - The scan prompt searches for "I have assigned you the following SDH" to find these messages
+
+---
+
+### 6. Bidirectional Slack flow — post updates back to threads
+**Not built yet.** When an engineer picks up an issue in the app, post back to the original DutyHelper thread in `actionable-obs-sdh` to acknowledge it.
+
+**Suggested flow:**
+- Engineer clicks "Acknowledge" (or status changes from `open`) → post to Slack thread: "👀 @name is looking at this"
+- AI summary gets posted as a follow-up comment in the same thread so teammates have instant context
+- Optionally: post on status changes (pending customer, resolved)
+
+**Implementation notes:**
+- Use `mcp__claude_ai_Slack__slack_send_message` via Claude CLI — the tool exists in the MCP but hasn't been used for writes yet
+- Posts will appear as the Claude AI Slack identity, not the engineer's own account — consider mentioning the engineer by name in the message body
+- Need to store the Slack thread `ts` (timestamp) when scanning so we can reply to the right thread. Currently the scan doesn't capture the thread ts — that's the first thing to add.
+- New backend endpoint: `POST /api/cases/:id/acknowledge` — triggers the Slack post + sets status
 
 ---
 
