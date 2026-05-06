@@ -118,27 +118,7 @@ Chat uses streaming via `spawn` with `--output-format stream-json`.
 
 ---
 
-### 3. Area→repo mapping — expand the table
-**Current entries:**
-- `area::observability-alerting-metrics` → `elastic/sdh-kibana`
-- `area::synthetics` → `elastic/sdh-synthetics`
-
-**TODO:** Add more mappings as you encounter new area labels. Claude fallback infers the repo when mapping is missing, but explicit mappings are more reliable.
-
-```sql
-INSERT INTO area_repo_mappings (area_label, github_repo) VALUES
-  ('area::your-label', 'elastic/sdh-yourrepo')
-ON CONFLICT (area_label) DO NOTHING;
-```
-
----
-
-### 4. Team page — GitHub handle cleanup
-Auto-created engineers from Slack sync have placeholder handles (`kevin.delemme` format). These should be updated with real GitHub handles so the "Elastic" badge shows correctly on GitHub thread comments.
-
----
-
-### 5. Scan improvement — false positive filtering
+### 2. Scan improvement — false positive filtering
 The scan occasionally picks up non-SDH issues (e.g. "test issue" #267 was imported). Consider adding a filter — only import issues where DutyHelper explicitly assigns them to the current duty engineer, or issues with `urgency:` label.
 
 ## Scan — DutyHelper message format
@@ -161,7 +141,7 @@ Key parsing notes:
 
 ---
 
-### 6. Bidirectional Slack flow — post updates back to threads
+### 3. Bidirectional Slack flow — post updates back to threads
 **Not built yet.** When an engineer picks up an issue in the app, post back to the original DutyHelper thread in `actionable-obs-sdh` to acknowledge it.
 
 **Suggested flow:**
@@ -177,7 +157,7 @@ Key parsing notes:
 
 ---
 
-### 7. Notification/reminder system
+### 4. Notification/reminder system
 **Not built.** Ideas discussed:
 - Cases in `pending_customer` for 3+ days with no update → nudge current owner
 - End of week reminder to write handover notes
@@ -185,5 +165,5 @@ Key parsing notes:
 
 ---
 
-### 8. Google Docs integration
+### 5. Google Docs integration
 **Deferred.** Originally discussed as a data source but replaced by this app. Could still be useful for importing historical context from the team's existing SDH Google Doc.

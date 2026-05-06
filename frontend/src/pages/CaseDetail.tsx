@@ -596,15 +596,34 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
                           ) : (
                             <div className="space-y-2 pt-2">
                               {([
-                                ["📝 Summary",      parsed.summary],
-                                ["✅ Decisions",    parsed.decisions],
-                                ["👉 Action items", parsed.action_items],
+                                ["📝 Summary",   parsed.summary],
+                                ["✅ Decisions", parsed.decisions],
                               ] as [string, string][]).map(([label, value]) => value && value !== "None" ? (
                                 <div key={label}>
                                   <div className="text-xs font-medium text-gray-500 mb-0.5">{label}</div>
                                   <p className="text-sm text-gray-800">{value}</p>
                                 </div>
                               ) : null)}
+                              {(() => {
+                                const items = parsed.action_items;
+                                if (!items || items === "None" || (Array.isArray(items) && items.length === 0)) return null;
+                                const list: string[] = Array.isArray(items)
+                                  ? items
+                                  : items.split(/\n|(?:\d+\.\s)/).map((s: string) => s.trim()).filter(Boolean);
+                                return (
+                                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                                    <div className="text-xs font-semibold text-amber-700 mb-1.5">👉 Action items</div>
+                                    <ul className="space-y-1">
+                                      {list.map((item, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
+                                          <span className="mt-0.5 shrink-0 h-4 w-4 rounded border border-amber-400 bg-white" />
+                                          {item}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>

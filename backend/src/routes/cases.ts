@@ -327,8 +327,10 @@ Respond ONLY with a JSON object in this format, no markdown, no preamble:
 {
   "summary": "2-3 sentence overview of the discussion",
   "decisions": "Any decisions or conclusions reached (or 'None' if none)",
-  "action_items": "Any action items or next steps mentioned (or 'None' if none)"
-}`;
+  "action_items": ["action item 1", "action item 2"]
+}
+
+For action_items: return an array of short, specific action items (each as a plain string). Use an empty array [] if there are none.`;
 
     const stdout = execSync(
       `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_read_thread,mcp__claude_ai_Slack__slack_read_channel`,
