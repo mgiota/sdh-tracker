@@ -1,5 +1,6 @@
 import { execSync } from "child_process";
 import { pool } from "../db/client";
+import { SLACK_READ_TOOLS, looksLikePermissionDenial } from "./claudeUtils";
 
 export interface DutyPeriod {
   name: string;
@@ -18,9 +19,19 @@ class SlackScheduleProvider implements ScheduleProvider {
   async getSchedule(): Promise<DutyPeriod[]> {
     const claudePath = process.env.CLAUDE_PATH || "claude";
 
-    const prompt = `Search the Slack channel "actionable-obs-sdh" for recent messages from the DutyHelper app about SDH duty schedule.
+    const today = new Date().toISOString().slice(0, 10);
 
-Extract all duty periods you find. For each period return the engineer name, start date and end date.
+    const prompt = `Today's date is ${today}.
+
+Search the Slack channel "actionable-obs-sdh" for messages from the DutyHelper app about SDH duty schedule. Look at messages from the last 8 weeks, not just the most recent ones.
+
+DutyHelper posts two kinds of messages that reveal the schedule:
+1. Weekly rotation announcements (e.g. "Hi <@name>, you are on duty this week" or similar).
+2. SDH assignment messages that mention who is "currently on duty" — example:
+     @panagiota.mitsopoulou!
+     I have assigned you the following SDH, as to my knowledge you are currently on duty for area::...
+
+Extract one entry per (engineer, week). The duty week runs Monday → Friday. If only the engineer + a single date are visible, infer the Monday/Friday of that calendar week.
 
 Respond ONLY with a JSON array, no markdown, no preamble:
 [
@@ -34,7 +45,7 @@ Respond ONLY with a JSON array, no markdown, no preamble:
 If you cannot find any schedule information, return an empty array: []`;
 
     const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_search_public_and_private,mcp__claude_ai_Slack__slack_read_channel`,
+      `${claudePath} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
       {
         input: prompt,
         encoding: "utf8",
@@ -45,8 +56,21 @@ If you cannot find any schedule information, return an empty array: []`;
     ) as string;
 
     const clean = stdout.replace(/```json|```/g, "").trim();
+    console.log("[schedule-sync] Claude raw output:", clean.slice(0, 2000));
+
+    if (looksLikePermissionDenial(clean)) {
+      throw new Error(
+        "Slack MCP tool permission denied. Run `claude mcp list` to confirm Slack is connected, then try again. (Raw response started with: " +
+          clean.slice(0, 120).replace(/\s+/g, " ") +
+          "…)"
+      );
+    }
+
     const jsonMatch = clean.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
+    if (!jsonMatch) {
+      console.log("[schedule-sync] No JSON array found in output");
+      return [];
+    }
 
     return JSON.parse(jsonMatch[0]) as DutyPeriod[];
   }

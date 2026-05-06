@@ -3,6 +3,7 @@ import { execSync } from "child_process";
 import { pool } from "../db/client";
 import { fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
+import { SLACK_READ_TOOLS, looksLikePermissionDenial } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -14,8 +15,12 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const claudePath = process.env.CLAUDE_PATH || "claude";
 
+    const today = new Date().toISOString().slice(0, 10);
+
     // Step 1: Read DutyHelper messages from Slack
-    const prompt = `Search Slack for recent messages from DutyHelper in the actionable-obs-sdh channel. Search for "I have assigned you the following SDH".
+    const prompt = `Today's date is ${today}.
+
+Search Slack for recent messages from DutyHelper in the actionable-obs-sdh channel. Search for "I have assigned you the following SDH".
 
 DutyHelper messages look exactly like this:
 
@@ -46,7 +51,7 @@ Return ONLY a JSON array, no markdown, no preamble, no explanation:
 If no SDH assignments found, return: []`;
 
     const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_search_public_and_private,mcp__claude_ai_Slack__slack_read_channel,mcp__claude_ai_Slack__slack_search_channels`,
+      `${claudePath} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
       {
         input: prompt,
         encoding: "utf8",
@@ -58,6 +63,17 @@ If no SDH assignments found, return: []`;
 
     const clean = stdout.replace(/```json|```/g, "").trim();
     console.log("[scan] Claude raw output:", clean.slice(0, 2000));
+
+    if (looksLikePermissionDenial(clean)) {
+      return res.json({
+        imported: [],
+        skipped: [],
+        errors: [
+          "Slack MCP tool permission denied. Run `claude mcp list` to confirm Slack is connected, then try again.",
+        ],
+      });
+    }
+
     const jsonMatch = clean.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       console.log("[scan] No JSON array found in output");
