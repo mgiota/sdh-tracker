@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { pool } from "../db/client";
 import { fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
-import { SLACK_READ_TOOLS, looksLikePermissionDenial } from "../services/claudeUtils";
+import { SLACK_READ_TOOLS, looksLikePermissionDenial, normalizeEngineerName } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -11,6 +11,7 @@ const router = Router();
 // Scan actionable-obs-sdh Slack channel for new SDH issues assigned to current user
 router.post("/", async (req: Request, res: Response) => {
   const { engineer_id } = req.body;
+  const lookbackDays = Math.min(Math.max(parseInt(req.body.lookback_days, 10) || 7, 1), 90);
 
   try {
     const claudePath = process.env.CLAUDE_PATH || "claude";
@@ -36,7 +37,7 @@ Key things to extract from each message:
 - assignee: the @mention name (e.g. "panagiota.mitsopoulou")
 
 There are many different area labels — extract whatever area::label appears in each message.
-Extract ALL such messages from the last 7 days.
+Extract ALL such messages from the last ${lookbackDays} days.
 
 Return ONLY a JSON array, no markdown, no preamble, no explanation:
 [
@@ -87,13 +88,24 @@ If no SDH assignments found, return: []`;
     const skipped: any[]  = [];
     const errors: string[] = [];
 
-    // Step 2: Find current duty engineer
+    // Step 2: Find current duty engineer (fallback when DutyHelper assignee can't be resolved)
     const dutyEng = await pool.query(
       `SELECT engineer_id FROM duty_weeks
        WHERE week_start <= CURRENT_DATE AND week_end >= CURRENT_DATE
        LIMIT 1`
     );
-    const ownerId = dutyEng.rows.length ? dutyEng.rows[0].engineer_id : (engineer_id ?? null);
+    const fallbackOwnerId = dutyEng.rows.length ? dutyEng.rows[0].engineer_id : (engineer_id ?? null);
+
+    // Load engineers once for fuzzy-matching DutyHelper @mentions ("first.last") to records.
+    const { rows: allEngineers } = await pool.query<{ id: number; name: string }>(
+      "SELECT id, name FROM engineers"
+    );
+    function resolveAssignee(assignee: string | undefined): number | null {
+      if (!assignee) return fallbackOwnerId;
+      const norm = normalizeEngineerName(assignee);
+      const match = allEngineers.find(e => normalizeEngineerName(e.name) === norm);
+      return match ? match.id : fallbackOwnerId;
+    }
 
     for (const a of assignments) {
       try {
@@ -139,6 +151,7 @@ If no SDH assignments found, return: []`;
         const issue    = await fetchIssue(owner, repoName, a.issue_number);
         const comments = await fetchComments(owner, repoName, a.issue_number);
 
+        const ownerId = resolveAssignee(a.assignee);
         const { rows } = await pool.query(
           `INSERT INTO cases
             (github_url, github_issue_num, github_repo, title, body, status,

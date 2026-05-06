@@ -1,6 +1,6 @@
 import { execSync } from "child_process";
 import { pool } from "../db/client";
-import { SLACK_READ_TOOLS, looksLikePermissionDenial } from "./claudeUtils";
+import { SLACK_READ_TOOLS, looksLikePermissionDenial, normalizeEngineerName } from "./claudeUtils";
 
 export interface DutyPeriod {
   name: string;
@@ -95,11 +95,6 @@ function getProvider(): ScheduleProvider {
   const provider = process.env.SCHEDULE_PROVIDER ?? "slack";
   if (provider === "pagerduty") return new PagerDutyScheduleProvider();
   return new SlackScheduleProvider();
-}
-
-// ── Name normalizer for fuzzy matching ───────────────────────────────────────
-function normalizeEngineerName(name: string): string {
-  return name.toLowerCase().replace(/[\s.\-_]+/g, "");
 }
 
 // ── Sync to DB ────────────────────────────────────────────────────────────────

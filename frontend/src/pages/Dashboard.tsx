@@ -36,12 +36,13 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
 
   const navigate = useNavigate();
   const [scanning, setScanning]   = useState(false);
+  const [scanLookback, setScanLookback] = useState(7);
   const [scanResult, setScanResult] = useState<{ imported: any[]; skipped: any[]; errors: string[] } | null>(null);
 
   async function handleScan() {
     setScanning(true); setScanResult(null);
     try {
-      const result = await scanForSDHs(engineer?.id);
+      const result = await scanForSDHs(engineer?.id, scanLookback);
       setScanResult(result);
       if (result.imported.length > 0) {
         const updated = await getCases();
@@ -106,10 +107,22 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
             className="text-xs flex items-center gap-1.5 bg-elastic-blue text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">
             📊 Weekly Report
           </button>
-          <button onClick={handleScan} disabled={scanning}
-            className="text-xs flex items-center gap-1.5 bg-elastic-green text-white px-3 py-2 rounded-lg hover:bg-teal-600 disabled:opacity-50 transition-colors">
-            {scanning ? "Scanning…" : "🔍 Scan for new SDHs"}
-          </button>
+          <div className="flex items-stretch rounded-lg overflow-hidden">
+            <button onClick={handleScan} disabled={scanning}
+              className="text-xs flex items-center gap-1.5 bg-elastic-green text-white px-3 py-2 hover:bg-teal-600 disabled:opacity-50 transition-colors">
+              {scanning ? "Scanning…" : "🔍 Scan for new SDHs"}
+            </button>
+            <select
+              value={scanLookback}
+              onChange={e => setScanLookback(parseInt(e.target.value, 10))}
+              disabled={scanning}
+              title="How far back to look for DutyHelper messages"
+              className="text-xs bg-elastic-green text-white border-l border-teal-700 px-2 hover:bg-teal-600 disabled:opacity-50 cursor-pointer focus:outline-none">
+              <option value={7}>7d</option>
+              <option value={14}>14d</option>
+              <option value={30}>30d</option>
+            </select>
+          </div>
         </div>
       </div>
 

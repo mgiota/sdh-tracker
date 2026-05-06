@@ -55,10 +55,10 @@ export const updateGithubUrl  = (id: number, github_url: string) =>
   req(`/cases/${id}/github-url`, { method: "PATCH", body: JSON.stringify({ github_url }) });
 
 // Scan
-export const scanForSDHs = (engineer_id?: number) =>
+export const scanForSDHs = (engineer_id?: number, lookback_days?: number) =>
   req<{ imported: any[]; skipped: any[]; errors: string[] }>("/scan", {
     method: "POST",
-    body: JSON.stringify({ engineer_id }),
+    body: JSON.stringify({ engineer_id, lookback_days }),
   });
 
 // Schedule sync

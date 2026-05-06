@@ -20,3 +20,9 @@ export function looksLikePermissionDenial(text: string): boolean {
     /\bslack\b/.test(t)
   );
 }
+
+// Fuzzy-match incoming names against engineer records.
+// Handles "Panagiota Mitsopoulou" vs "panagiota.mitsopoulou" vs "panagiota-mitsopoulou".
+export function normalizeEngineerName(name: string): string {
+  return name.toLowerCase().replace(/[\s.\-_]+/g, "");
+}
