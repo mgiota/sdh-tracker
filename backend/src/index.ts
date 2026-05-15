@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { pool, initDb } from "./db/client";
+import { initDb } from "./db/client";
 import casesRouter from "./routes/cases";
 import { engineersRouter } from "./routes/engineers";
 import { dutyRouter } from "./routes/duty";
@@ -10,7 +10,6 @@ import chatRouter from "./routes/chat";
 import reportsRouter from "./routes/reports";
 import scheduleSyncRouter from "./routes/scheduleSync";
 import scanRouter from "./routes/scan";
-import { syncSchedule } from "./services/scheduleProvider";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,10 +33,6 @@ app.use("/api/scan", scanRouter);
 initDb().then(() => {
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`SDH backend running on :${PORT}`);
-    // Sync schedule on startup (non-blocking)
-    syncSchedule()
-      .then(r => console.log(`Schedule sync: ${r.synced} entries synced${r.errors.length ? `, errors: ${r.errors.join(", ")}` : ""}`))
-      .catch(err => console.error("Schedule sync failed:", err.message));
   });
 }).catch((err) => {
   console.error("Failed to initialise DB:", err);
