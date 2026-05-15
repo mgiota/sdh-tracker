@@ -4,6 +4,7 @@ import { pool } from "../db/client";
 import { parseIssueUrl, fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
 import { CLAUDE_MODEL } from "../services/claudeUtils";
+import { redact, redactDeep } from "../services/redact";
 
 const router = Router();
 
@@ -185,25 +186,27 @@ router.post("/:id/refresh", async (req: Request, res: Response) => {
 
 // ── POST /api/cases/:id/updates ─────────────────────────────────────────────
 router.post("/:id/updates", async (req: Request, res: Response) => {
-  const { engineer_id, update_type, content, metadata } = req.body;
+  const { engineer_id, update_type, metadata } = req.body;
+  const content = redact(req.body.content);
+  const cleanMetadata = metadata ? redactDeep(metadata) : null;
   if (!engineer_id || !update_type || !content)
     return res.status(400).json({ error: "engineer_id, update_type, content required" });
   try {
     const { rows } = await pool.query(
       `INSERT INTO case_updates (case_id, engineer_id, update_type, content, metadata)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.id, engineer_id, update_type, content, metadata ? JSON.stringify(metadata) : null]
+      [req.params.id, engineer_id, update_type, content, cleanMetadata ? JSON.stringify(cleanMetadata) : null]
     );
     await pool.query("UPDATE cases SET updated_at=NOW() WHERE id=$1", [req.params.id]);
 
     // If it's a slack_link, insert into slack_links (deduplicated) and auto-summarize
-    if (update_type === "slack_link" && metadata?.url) {
+    if (update_type === "slack_link" && cleanMetadata?.url) {
       const slackInsert = await pool.query(
         `INSERT INTO slack_links (case_id, url, description, added_by_id)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (case_id, url) DO NOTHING
          RETURNING id`,
-        [req.params.id, metadata.url, content, engineer_id]
+        [req.params.id, cleanMetadata.url, content, engineer_id]
       );
       if (slackInsert.rows.length) {
         const linkId = slackInsert.rows[0].id;
@@ -344,7 +347,7 @@ For action_items: return an array of short, specific action items (each as a pla
       }
     ) as string;
 
-    const clean = stdout.replace(/```json|```/g, "").trim();
+    const clean = redact(stdout.replace(/```json|```/g, "").trim());
     const jsonMatch = clean.match(/\{[\s\S]*\}/);
     const summary = jsonMatch ? jsonMatch[0] : JSON.stringify({ summary: clean, decisions: "", action_items: "" });
 
@@ -529,14 +532,16 @@ If no cases are similar, return: []`;
 
 // ── POST /api/cases/:id/handover ────────────────────────────────────────────
 router.post("/:id/handover", async (req: Request, res: Response) => {
-  const { from_engineer_id, to_engineer_id, summary, next_steps, week_start } = req.body;
+  const { from_engineer_id, to_engineer_id, week_start } = req.body;
+  const summary = redact(req.body.summary);
+  const next_steps = req.body.next_steps ? redact(req.body.next_steps) : null;
   if (!from_engineer_id || !summary || !week_start)
     return res.status(400).json({ error: "from_engineer_id, summary, week_start required" });
   try {
     const { rows } = await pool.query(
       `INSERT INTO handovers (case_id, from_engineer_id, to_engineer_id, summary, next_steps, week_start)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.params.id, from_engineer_id, to_engineer_id ?? null, summary, next_steps ?? null, week_start]
+      [req.params.id, from_engineer_id, to_engineer_id ?? null, summary, next_steps, week_start]
     );
     await pool.query(
       `INSERT INTO case_updates (case_id, engineer_id, update_type, content)

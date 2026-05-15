@@ -2,8 +2,8 @@ import { Router, Request, Response } from "express";
 import { spawn } from "child_process";
 import { pool } from "../db/client";
 import { fetchIssue, fetchComments } from "../services/github";
-import { parseSlackUrl, fetchThread, formatThreadForAI, isSlackAvailable } from "../services/slack";
 import { CLAUDE_MODEL } from "../services/claudeUtils";
+import { redact } from "../services/redact";
 
 const router = Router();
 
@@ -154,7 +154,7 @@ ${referencedContext ? `\n${referencedContext}` : ""}`;
     // Save user message
     await pool.query(
       "INSERT INTO chat_messages (case_id, role, content, engineer_id) VALUES ($1,'user',$2,$3)",
-      [req.params.id, message, engineer_id ?? null]
+      [req.params.id, redact(message), engineer_id ?? null]
     );
 
     // Set up SSE
@@ -206,12 +206,12 @@ ${referencedContext ? `\n${referencedContext}` : ""}`;
       console.error("Claude stderr:", chunk.toString());
     });
 
-    proc.on("close", async (code) => {
+    proc.on("close", async () => {
       // Save assistant response to DB
       if (fullResponse.trim()) {
         await pool.query(
           "INSERT INTO chat_messages (case_id, role, content) VALUES ($1,'assistant',$2)",
-          [req.params.id, fullResponse.trim()]
+          [req.params.id, redact(fullResponse.trim())]
         );
       }
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);

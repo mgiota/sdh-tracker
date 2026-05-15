@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { execSync } from "child_process";
 import { pool } from "../db/client";
 import { CLAUDE_MODEL } from "../services/claudeUtils";
+import { redact, redactDeep } from "../services/redact";
 
 const router = Router();
 
@@ -129,10 +130,10 @@ ${context}
 
 Write only the narrative paragraphs, no headers, no bullet points.`;
 
-      narrative = execSync(
+      narrative = redact(execSync(
         `${process.env.CLAUDE_PATH || "claude"} --model ${CLAUDE_MODEL} --print --verbose --output-format text`,
         { input: prompt, encoding: "utf8", timeout: 60_000, maxBuffer: 1024 * 1024, env: { ...process.env } }
-      ) as string;
+      ) as string);
     } catch (err) {
       console.error("AI narrative failed:", err);
       narrative = "";
@@ -156,12 +157,12 @@ Write only the narrative paragraphs, no headers, no bullet points.`;
        ON CONFLICT (week_start) DO UPDATE SET
          markdown=EXCLUDED.markdown, narrative=EXCLUDED.narrative,
          data=EXCLUDED.data, updated_at=NOW()`,
-      [weekStart, weekEnd, markdown, narrative.trim(), JSON.stringify({
+      [weekStart, weekEnd, markdown, narrative.trim(), JSON.stringify(redactDeep({
         week_start: weekStart, week_end: weekEnd,
         duty: duty.rows[0] ?? null,
         opened: opened.rows, resolved: resolved.rows,
         still_open: stillOpen.rows, handovers: handovers.rows,
-      })]
+      }))]
     );
 
     res.json({

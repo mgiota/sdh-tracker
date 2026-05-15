@@ -1,3 +1,5 @@
+import { redact } from "./redact";
+
 const GH_API = "https://api.github.com";
 const TOKEN = process.env.GITHUB_TOKEN;
 
@@ -34,7 +36,10 @@ export function parseIssueUrl(url: string): { owner: string; repo: string; numbe
 export async function fetchIssue(owner: string, repo: string, num: number): Promise<GithubIssue> {
   const res = await fetch(`${GH_API}/repos/${owner}/${repo}/issues/${num}`, { headers });
   if (!res.ok) throw new Error(`GitHub API error ${res.status}: ${await res.text()}`);
-  return res.json();
+  const issue = await res.json() as GithubIssue;
+  issue.title = redact(issue.title);
+  issue.body = issue.body != null ? redact(issue.body) : null;
+  return issue;
 }
 
 export async function fetchComments(owner: string, repo: string, num: number): Promise<GithubComment[]> {
@@ -46,7 +51,8 @@ export async function fetchComments(owner: string, repo: string, num: number): P
       { headers }
     );
     if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
-    const batch: GithubComment[] = await res.json();
+    const batch = await res.json() as GithubComment[];
+    batch.forEach(c => { c.body = redact(c.body); });
     all.push(...batch);
     if (batch.length < 100) break;
     page++;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/client";
+import { redact } from "../services/redact";
 
 export const dutyRouter = Router();
 
@@ -29,7 +30,7 @@ dutyRouter.post("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
       "INSERT INTO duty_weeks (engineer_id, week_start, week_end, notes) VALUES ($1,$2,$3,$4) RETURNING *",
-      [engineer_id, week_start, week_end, notes ?? null]
+      [engineer_id, week_start, week_end, notes ? redact(notes) : null]
     );
     res.status(201).json(rows[0]);
   } catch (err: any) {

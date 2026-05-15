@@ -4,6 +4,7 @@ import { pool } from "../db/client";
 import { fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
 import { SLACK_READ_TOOLS, CLAUDE_MODEL, looksLikePermissionDenial, normalizeEngineerName } from "../services/claudeUtils";
+import { redact } from "../services/redact";
 
 const router = Router();
 
@@ -73,7 +74,7 @@ If no SDH assignments found, return: []`;
       return res.status(500).json({ error: `Claude CLI failed: ${detail}` });
     }
 
-    const clean = stdout.replace(/```json|```/g, "").trim();
+    const clean = redact(stdout.replace(/```json|```/g, "").trim());
     console.log("[scan] Claude raw output:", clean.slice(0, 2000));
 
     if (looksLikePermissionDenial(clean)) {

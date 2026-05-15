@@ -1,6 +1,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { CLAUDE_MODEL } from "./claudeUtils";
+import { redact } from "./redact";
 
 const execFileAsync = promisify(execFile);
 
@@ -52,8 +53,7 @@ ${thread}`;
       maxBuffer: 1024 * 1024,
     });
 
-    // Strip any accidental markdown fences
-    const clean = stdout.replace(/```json|```/g, "").trim();
+    const clean = redact(stdout.replace(/```json|```/g, "").trim());
     return JSON.parse(clean) as SummaryResult;
   } catch (err: any) {
     console.error("Claude CLI error:", err.message);
