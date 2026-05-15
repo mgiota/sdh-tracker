@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { CLAUDE_MODEL } from "./claudeUtils";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +43,8 @@ ${thread}`;
 
   try {
     const { stdout } = await execFileAsync("claude", [
-      "--print",          // non-interactive, print output and exit
+      "--model", CLAUDE_MODEL,
+      "--print",
       "--output-format", "text",
       prompt,
     ], {

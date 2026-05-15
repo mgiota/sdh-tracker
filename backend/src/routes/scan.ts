@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { pool } from "../db/client";
 import { fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
-import { SLACK_READ_TOOLS, looksLikePermissionDenial, normalizeEngineerName } from "../services/claudeUtils";
+import { SLACK_READ_TOOLS, CLAUDE_MODEL, looksLikePermissionDenial, normalizeEngineerName } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -51,16 +51,27 @@ Return ONLY a JSON array, no markdown, no preamble, no explanation:
 
 If no SDH assignments found, return: []`;
 
-    const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
-      {
-        input: prompt,
-        encoding: "utf8",
-        timeout: 60_000,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env },
-      }
-    ) as string;
+    let stdout: string;
+    try {
+      stdout = execSync(
+        `${claudePath} --model ${CLAUDE_MODEL} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
+        {
+          input: prompt,
+          encoding: "utf8",
+          timeout: 120_000,
+          maxBuffer: 1024 * 1024,
+          env: { ...process.env },
+        }
+      ) as string;
+    } catch (execErr: any) {
+      const stderr = execErr.stderr?.toString().trim();
+      const stdout = execErr.stdout?.toString().trim();
+      console.error("[scan] Claude CLI failed — exit:", execErr.status);
+      if (stderr) console.error("[scan] stderr:", stderr);
+      if (stdout) console.error("[scan] stdout:", stdout);
+      const detail = stderr || stdout || execErr.message;
+      return res.status(500).json({ error: `Claude CLI failed: ${detail}` });
+    }
 
     const clean = stdout.replace(/```json|```/g, "").trim();
     console.log("[scan] Claude raw output:", clean.slice(0, 2000));

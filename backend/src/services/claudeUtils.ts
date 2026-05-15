@@ -1,3 +1,7 @@
+// Model to use for all Claude CLI calls. Override via CLAUDE_MODEL env var.
+// Default is claude-sonnet-4-6 (standard context, no extra usage required).
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
+
 // Comma-separated list of read-only Slack MCP tools we allow Claude CLI to use
 // when invoked from the backend. Includes search + read variants so Claude
 // doesn't fail by reaching for an unallowed sibling tool.

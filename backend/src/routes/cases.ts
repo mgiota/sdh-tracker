@@ -3,6 +3,7 @@ import { execSync } from "child_process";
 import { pool } from "../db/client";
 import { parseIssueUrl, fetchIssue, fetchComments, isElasticMember } from "../services/github";
 import { summarizeIssue } from "../services/summarize";
+import { CLAUDE_MODEL } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -333,7 +334,7 @@ Respond ONLY with a JSON object in this format, no markdown, no preamble:
 For action_items: return an array of short, specific action items (each as a plain string). Use an empty array [] if there are none.`;
 
     const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_read_thread,mcp__claude_ai_Slack__slack_read_channel`,
+      `${claudePath} --model ${CLAUDE_MODEL} --print --verbose --output-format text --allowedTools mcp__claude_ai_Slack__slack_read_thread,mcp__claude_ai_Slack__slack_read_channel`,
       {
         input: prompt,
         encoding: "utf8",
@@ -426,7 +427,7 @@ Return ONLY a JSON array using the IDX numbers, no markdown, no preamble:
 
 If no issues are similar, return: []`;
 
-      const stdout = execSync(`${claudePath} --print --output-format text`, {
+      const stdout = execSync(`${claudePath} --model ${CLAUDE_MODEL} --print --output-format text`, {
         input: prompt, encoding: "utf8", timeout: 90_000,
         maxBuffer: 1024 * 1024, env: { ...process.env },
       }) as string;
@@ -494,7 +495,7 @@ Return ONLY a JSON array, no markdown, no preamble:
 
 If no cases are similar, return: []`;
 
-    const stdout = execSync(`${claudePath} --print --output-format text`, {
+    const stdout = execSync(`${claudePath} --model ${CLAUDE_MODEL} --print --output-format text`, {
       input: prompt, encoding: "utf8", timeout: 90_000,
       maxBuffer: 1024 * 1024, env: { ...process.env },
     }) as string;

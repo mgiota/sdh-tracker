@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import { pool } from "../db/client";
 import { fetchIssue, fetchComments } from "../services/github";
 import { parseSlackUrl, fetchThread, formatThreadForAI, isSlackAvailable } from "../services/slack";
+import { CLAUDE_MODEL } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -165,7 +166,7 @@ ${referencedContext ? `\n${referencedContext}` : ""}`;
     const claudePath = process.env.CLAUDE_PATH || "claude";
     const fullPrompt = `${systemPrompt}\n\nEngineer's question: ${message}`;
 
-    const proc = spawn(claudePath, ["--print", "--verbose", "--dangerously-skip-permissions", "--output-format", "stream-json", fullPrompt], {
+    const proc = spawn(claudePath, ["--model", CLAUDE_MODEL, "--print", "--verbose", "--dangerously-skip-permissions", "--output-format", "stream-json", fullPrompt], {
       env: { ...process.env },
     });
 

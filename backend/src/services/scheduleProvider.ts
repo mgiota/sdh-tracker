@@ -1,6 +1,6 @@
 import { execSync } from "child_process";
 import { pool } from "../db/client";
-import { SLACK_READ_TOOLS, looksLikePermissionDenial, normalizeEngineerName } from "./claudeUtils";
+import { SLACK_READ_TOOLS, CLAUDE_MODEL, looksLikePermissionDenial, normalizeEngineerName } from "./claudeUtils";
 
 export interface DutyPeriod {
   name: string;
@@ -45,7 +45,7 @@ Respond ONLY with a JSON array, no markdown, no preamble:
 If you cannot find any schedule information, return an empty array: []`;
 
     const stdout = execSync(
-      `${claudePath} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
+      `${claudePath} --model ${CLAUDE_MODEL} --print --verbose --output-format text --allowedTools ${SLACK_READ_TOOLS}`,
       {
         input: prompt,
         encoding: "utf8",

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { execSync } from "child_process";
 import { pool } from "../db/client";
+import { CLAUDE_MODEL } from "../services/claudeUtils";
 
 const router = Router();
 
@@ -129,7 +130,7 @@ ${context}
 Write only the narrative paragraphs, no headers, no bullet points.`;
 
       narrative = execSync(
-        `${process.env.CLAUDE_PATH || "claude"} --print --verbose --output-format text`,
+        `${process.env.CLAUDE_PATH || "claude"} --model ${CLAUDE_MODEL} --print --verbose --output-format text`,
         { input: prompt, encoding: "utf8", timeout: 60_000, maxBuffer: 1024 * 1024, env: { ...process.env } }
       ) as string;
     } catch (err) {
