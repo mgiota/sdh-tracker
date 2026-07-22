@@ -10,9 +10,10 @@ export interface Engineer {
 
 export interface Case {
   id: number;
-  github_url: string;
-  github_issue_num: number;
-  github_repo: string;
+  github_url?: string | null;
+  github_issue_num?: number | null;
+  github_repo?: string | null;
+  slack_origin_url?: string | null;
   title: string;
   body: string;
   status: CaseStatus;

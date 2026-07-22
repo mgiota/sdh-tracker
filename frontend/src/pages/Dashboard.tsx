@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getCases, getCurrentDuty, importCase, scanForSDHs, deleteCase } from "../api";
+import { getCases, getCurrentDuty, importCase, importSlackCase, scanForSDHs, deleteCase } from "../api";
 import type { Case, CaseStatus, DutyWeek, Engineer } from "../types";
 
 const STATUS_LABEL: Record<CaseStatus, string> = {
@@ -58,7 +58,9 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
   const [cases, setCases]   = useState<Case[]>([]);
   const [duty, setDuty]     = useState<DutyWeek | null>(null);
   const [filter, setFilter] = useState<CaseStatus | "all">("all");
+  const [importTab, setImportTab] = useState<"github" | "slack">("github");
   const [ghUrl, setGhUrl]   = useState("");
+  const [slackUrl, setSlackUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importErr, setImportErr] = useState("");
   const [loading, setLoading]     = useState(true);
@@ -77,7 +79,29 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
       const c = await importCase(ghUrl.trim(), engineer.id);
       setCases(prev => [c, ...prev]);
       setGhUrl("");
+      navigate(`/cases/${c.id}`);
     } catch (e: any) {
+      setImportErr(e.message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleSlackImport() {
+    if (!slackUrl.trim()) return;
+    if (!engineer) { setImportErr("Please select your name first (top right)."); return; }
+    setImporting(true); setImportErr("");
+    try {
+      const c = await importSlackCase(slackUrl.trim(), engineer.id);
+      setCases(prev => [c, ...prev]);
+      setSlackUrl("");
+      navigate(`/cases/${c.id}`);
+    } catch (e: any) {
+      // 409 = already imported — navigate to existing case
+      if (e.message?.includes("already imported") || e.message?.includes("409")) {
+        const match = e.message.match(/case_id["\s:]+(\d+)/);
+        if (match) { navigate(`/cases/${match[1]}`); return; }
+      }
       setImportErr(e.message);
     } finally {
       setImporting(false);
@@ -189,20 +213,63 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
 
       {/* ── Import ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-semibold text-sm mb-3">Import GitHub Issue</h2>
-        <div className="flex gap-2">
-          <input
-            value={ghUrl}
-            onChange={e => setGhUrl(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleImport()}
-            placeholder="https://github.com/elastic/sdh-synthetics/issues/123"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue"
-          />
-          <button onClick={handleImport} disabled={importing || !ghUrl.trim()}
-            className="bg-elastic-blue text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-            {importing ? "Importing…" : "Import"}
+        {/* Tab header */}
+        <div className="flex gap-1 mb-3">
+          <button
+            onClick={() => { setImportTab("github"); setImportErr(""); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              importTab === "github"
+                ? "bg-elastic-blue text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}>
+            GitHub Issue
+          </button>
+          <button
+            onClick={() => { setImportTab("slack"); setImportErr(""); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              importTab === "slack"
+                ? "bg-purple-600 text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}>
+            💬 Start from Slack Thread
           </button>
         </div>
+
+        {importTab === "github" ? (
+          <div className="flex gap-2">
+            <input
+              value={ghUrl}
+              onChange={e => setGhUrl(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleImport()}
+              placeholder="https://github.com/elastic/sdh-synthetics/issues/123"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-elastic-blue"
+            />
+            <button onClick={handleImport} disabled={importing || !ghUrl.trim()}
+              className="bg-elastic-blue text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+              {importing ? "Importing…" : "Import"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                value={slackUrl}
+                onChange={e => setSlackUrl(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSlackImport()}
+                placeholder="https://elastic.slack.com/archives/C.../p..."
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <button onClick={handleSlackImport} disabled={importing || !slackUrl.trim()}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap">
+                {importing ? "Reading thread…" : "Start Investigation"}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">
+              Claude will read the Slack thread, extract the issue, and auto-link any GitHub issue found in the thread.
+            </p>
+          </div>
+        )}
+
         {importErr && <p className="text-red-500 text-xs mt-2">{importErr}</p>}
       </div>
 
@@ -234,7 +301,11 @@ export default function Dashboard({ engineer }: { engineer: Engineer | null }) {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{c.title}</div>
                     <div className="text-xs text-gray-400 mt-0.5">
-                      {c.github_repo} #{c.github_issue_num} · updated {timeAgo(c.updated_at)}
+                      {c.github_repo && c.github_issue_num
+                        ? <>{c.github_repo} #{c.github_issue_num} · </>
+                        : <span className="text-purple-400">💬 Slack · </span>
+                      }
+                      updated {timeAgo(c.updated_at)}
                       {c.owner_name && ` · ${c.owner_name}`}
                     </div>
                     {c.github_labels?.length > 0 && (

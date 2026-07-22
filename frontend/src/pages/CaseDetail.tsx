@@ -313,15 +313,35 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex-1">
-            <h1 className="font-bold text-lg leading-tight">{c.title}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-bold text-lg leading-tight">{c.title}</h1>
+              {c.slack_origin_url && !c.github_url && (
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                  💬 Slack origin
+                </span>
+              )}
+            </div>
             <div className="text-xs text-gray-400 mt-1">
-              {c.github_repo} #{c.github_issue_num} · opened by @{c.github_author}
+              {c.github_repo && c.github_issue_num
+                ? <>{c.github_repo} #{c.github_issue_num} · opened by @{c.github_author}</>
+                : c.github_author
+                  ? <>opened by @{c.github_author} · from Slack</>
+                  : <>Started from Slack thread</>
+              }
             </div>
           </div>
-          <a href={c.github_url} target="_blank" rel="noreferrer"
-            className="text-xs text-elastic-blue underline shrink-0">View on GitHub ↗</a>
-          <button onClick={() => { setEditingUrl(true); setNewGithubUrl(c.github_url); }}
-            className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✏️ Edit URL</button>
+          {c.slack_origin_url && (
+            <a href={c.slack_origin_url} target="_blank" rel="noreferrer"
+              className="text-xs text-purple-600 underline shrink-0">View in Slack ↗</a>
+          )}
+          {c.github_url && (
+            <a href={c.github_url} target="_blank" rel="noreferrer"
+              className="text-xs text-elastic-blue underline shrink-0">View on GitHub ↗</a>
+          )}
+          <button onClick={() => { setEditingUrl(true); setNewGithubUrl(c.github_url ?? ""); }}
+            className="text-xs text-gray-400 hover:text-gray-600 shrink-0" title={c.github_url ? "Edit GitHub URL" : "Link a GitHub issue"}>
+            {c.github_url ? "✏️ Edit URL" : "🔗 Link GitHub issue"}
+          </button>
           <button onClick={doDeleteCase}
             className="text-xs text-gray-400 hover:text-red-400 transition-colors shrink-0">🗑 Delete case</button>
         </div>
@@ -374,10 +394,12 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
               className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {findingSimilar ? "Searching…" : "🔍 Find similar cases"}
             </button>
-            <button onClick={doRefresh} disabled={refreshing}
-              className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-              {refreshing ? "Refreshing…" : "↻ Refresh from GitHub"}
-            </button>
+            {c.github_url && (
+              <button onClick={doRefresh} disabled={refreshing}
+                className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                {refreshing ? "Refreshing…" : "↻ Refresh from GitHub"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -419,7 +441,7 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex border-b border-gray-100">
           <button className={tabCls("thread")}   onClick={() => setTab("thread")}>
-            GitHub Thread ({c.github_comments.length})
+            {c.github_url ? `GitHub Thread (${c.github_comments.length})` : "Issue"}
           </button>
           <button className={tabCls("timeline")} onClick={() => setTab("timeline")}>
             Timeline ({c.updates.length})
@@ -434,13 +456,29 @@ export default function CaseDetailPage({ engineer }: { engineer: Engineer | null
 
         <div className="p-5">
 
-          {/* ── GitHub Thread ── */}
+          {/* ── GitHub Thread / Issue body ── */}
           {tab === "thread" && (
             <div className="space-y-4">
+              {!c.github_url && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-3 text-sm">
+                  <span className="text-purple-500">💬</span>
+                  <div className="flex-1 text-purple-800">
+                    This case started from a Slack thread.
+                    {c.slack_origin_url && (
+                      <a href={c.slack_origin_url} target="_blank" rel="noreferrer"
+                        className="ml-1 underline font-medium">View original thread ↗</a>
+                    )}
+                  </div>
+                  <button onClick={() => { setEditingUrl(true); setNewGithubUrl(""); }}
+                    className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 shrink-0">
+                    🔗 Link GitHub issue
+                  </button>
+                </div>
+              )}
               <div className="border border-gray-100 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-medium text-sm">@{c.github_author}</span>
-                  <span className="text-xs text-gray-400">opened issue</span>
+                  {c.github_author && <span className="font-medium text-sm">@{c.github_author}</span>}
+                  <span className="text-xs text-gray-400">{c.github_url ? "opened issue" : "Slack thread summary"}</span>
                   {c.github_labels?.map(l => (
                     <span key={l} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{l}</span>
                   ))}

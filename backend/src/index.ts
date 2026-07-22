@@ -10,6 +10,7 @@ import chatRouter from "./routes/chat";
 import reportsRouter from "./routes/reports";
 import scheduleSyncRouter from "./routes/scheduleSync";
 import scanRouter from "./routes/scan";
+import slackImportRouter from "./routes/slackImport";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +30,7 @@ app.use("/api/handovers", handoversRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/schedule", scheduleSyncRouter);
 app.use("/api/scan", scanRouter);
+app.use("/api/cases", slackImportRouter);
 
 initDb().then(() => {
   app.listen(Number(PORT), "0.0.0.0", () => {

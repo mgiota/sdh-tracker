@@ -19,6 +19,8 @@ export const getCases   = ()         => req<Case[]>("/cases");
 export const getCase    = (id: number) => req<CaseDetail>(`/cases/${id}`);
 export const importCase = (github_url: string, engineer_id: number) =>
   req<Case>("/cases/import", { method: "POST", body: JSON.stringify({ github_url, engineer_id }) });
+export const importSlackCase = (slack_url: string, engineer_id: number) =>
+  req<Case>("/cases/import-slack", { method: "POST", body: JSON.stringify({ slack_url, engineer_id }) });
 export const refreshCase = (id: number) =>
   req<{ new_comments: number }>(`/cases/${id}/refresh`, { method: "POST" });
 export const updateCase = (id: number, patch: Record<string, unknown>) =>

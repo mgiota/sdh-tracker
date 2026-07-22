@@ -17,9 +17,10 @@ CREATE TABLE IF NOT EXISTS duty_weeks (
 
 CREATE TABLE IF NOT EXISTS cases (
   id                SERIAL PRIMARY KEY,
-  github_url        TEXT NOT NULL UNIQUE,
-  github_issue_num  INTEGER NOT NULL,
-  github_repo       VARCHAR(200) NOT NULL,
+  github_url        TEXT UNIQUE,          -- nullable for Slack-origin cases
+  github_issue_num  INTEGER,              -- nullable for Slack-origin cases
+  github_repo       VARCHAR(200),         -- nullable for Slack-origin cases
+  slack_origin_url  TEXT,                 -- set when investigation starts from a Slack thread
   title             TEXT NOT NULL,
   body              TEXT,
   status            VARCHAR(50) NOT NULL DEFAULT 'open',
